@@ -1,0 +1,78 @@
+---
+title: "TeamAssignment_Final"
+author: "Yike Lyu"
+date: "10/9/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Read data and load packages
+```{r}
+youtube_orig <- read.csv("youtube1 (1).csv")
+youtube <- youtube_orig
+library(tidyverse)
+library(lubridate)
+```
+
+### Data Processing
+```{r}
+youtube_first_trending <- youtube %>%
+  group_by(video_id) %>%
+  mutate(first_trending = min(ydm(trending_date))) %>%
+  filter(ydm(trending_date) == first_trending) %>%
+  separate(publish_time, c("date","time"), sep="T") %>%
+  filter(date>="2017-12-01") %>%
+  dplyr::select(video_id, trending_date, date, time,title, channel_title, category_id, views,likes, dislikes, comment_count,tags) %>%
+  distinct()
+```
+
+### Two sample t test
+#### Video views at Weekend vs. Weekday
+```{r}
+youtube_ttest <- youtube_first_trending %>%
+  mutate(week_day = weekdays(ymd(date))) %>%
+  mutate(weekend=ifelse((week_day=="Saturday" | week_day=="Sunday"),1,0))
+
+t.test(youtube_ttest$views ~ youtube_ttest$weekend,
+       alternative = "two.sided", var.equal = TRUE)
+```
+
+### Anova
+#### Compare the means of number of views when each video goes on treding first time for each category.
+
+```{r}
+categoryTest <- aov(data = youtube_first_trending, views~as.factor(category_id))
+summary(categoryTest)
+TukeyHSD(categoryTest)
+```
+
+### Regression Model
+#### Relationship between video views and number of tags
+```{r}
+youtube_tags <- youtube_first_trending %>% 
+  mutate(tags = as.character(tags)) %>% 
+  mutate(numTags = ifelse((tags == "[none]"), 
+                          0, str_count(tags, "\\|")+1))
+
+model_tags <- lm(data = youtube_tags, views~numTags)
+summary(model_tags)
+par(mfrow = c(2, 2))
+plot(model_tags)
+```
+
+### use music and news category as dummy variables
+```{r}
+youtube_dummy <- youtube_tags %>% 
+  mutate(music = ifelse(category_id == 10, TRUE, FALSE)) %>% 
+  mutate(news = ifelse(category_id == 25, TRUE, FALSE))
+
+model <- lm(data = youtube_dummy, views~numTags+music+news)
+summary(model)
+par(mfrow = c(2, 2))
+plot(model)
+```
+
+
